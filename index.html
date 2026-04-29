@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Data Filter System</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            font-family: Arial, sans-serif;
+        }
+        .filter-container {
+            max-width: 1400px;
+            margin: 30px auto;
+            padding: 0 20px;
+        }
+        .filter-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-bottom: 20px;
+            align-items: center;
+        }
+        .filter-item {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        label {
+            font-size: 13px;
+            color: #555;
+            font-weight: 500;
+        }
+        input, select {
+            padding: 8px 10px;
+            width: 180px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        input:focus, select:focus {
+            outline: none;
+            border-color: #409eff;
+        }
+        #loading {
+            font-size: 16px;
+            color: #666;
+            padding: 20px 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+            background: #fff;
+        }
+        th, td {
+            border: 1px solid #e4e7ed;
+            padding: 10px 12px;
+            text-align: left;
+            font-size: 14px;
+        }
+        th {
+            background-color: #f5f7fa;
+            font-weight: 600;
+            color: #333;
+        }
+        tr:hover {
+            background-color: #fafafa;
+        }
+        /* Pagination */
+        .pagination {
+            margin-top: 20px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .pagination button {
+            padding: 6px 12px;
+            border: 1px solid #ddd;
+            background: #fff;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .pagination button.active {
+            background: #409eff;
+            color: #fff;
+            border-color: #409eff;
+        }
+        .pagination button:disabled {
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+        .page-info {
+            margin-left: 10px;
+            font-size: 14px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="filter-container">
+        <div class="filter-item">
+            <label>Search</label>
+            <input type="text" id="searchInput" placeholder="Search anything...">
+        </div>
+
+        <div class="filter-group">
+            <div class="filter-item">
+                <label>Name</label>
+                <select id="nameSelect"><option value="">All</option></select>
+            </div>
+            <div class="filter-item">
+                <label>Gender</label>
+                <select id="genderSelect"><option value="">All</option></select>
+            </div>
+            <div class="filter-item">
+                <label>School</label>
+                <select id="schoolSelect"><option value="">All</option></select>
+            </div>
+            <div class="filter-item">
+                <label>School Type</label>
+                <select id="schoolTypeSelect"><option value="">All</option></select>
+            </div>
+            <div class="filter-item">
+                <label>Zone</label>
+                <select id="zoneSelect"><option value="">All</option></select>
+            </div>
+        </div>
+
+        <div id="loading">Loading 4000+ data, please wait...</div>
+
+        <table id="dataTable" style="display:none;">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Gender</th>
+                    <th>School</th>
+                    <th>School Type</th>
+                    <th>Rating</th>
+                    <th>Zone</th>
+                </tr>
+            </thead>
+            <tbody id="dataBody"></tbody>
+        </table>
+
+        <div class="pagination" id="pagination" style="display:none;"></div>
+        <div class="page-info" id="pageInfo"></div>
+    </div>
+
+    <script>
+        let allData = [];
+        let filteredData = [];
+        let currentPage = 1;
+        const pageSize = 50;
+
+        // Load data
+        fetch('data.json')
+        .then(res => res.json())
+        .then(data => {
+            allData = data;
+            filteredData = [...allData];
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('dataTable').style.display = 'table';
+            document.getElementById('pagination').style.display = 'flex';
+            initAllSelects();
+            renderPage();
+        })
+        .catch(err => {
+            alert('Failed to load data! Make sure data.json is in the same folder.');
+            console.error(err);
+        });
+
+        // Elements
+        const searchInput = document.getElementById('searchInput');
+        const nameSelect = document.getElementById('nameSelect');
+        const genderSelect = document.getElementById('genderSelect');
+        const schoolSelect = document.getElementById('schoolSelect');
+        const schoolTypeSelect = document.getElementById('schoolTypeSelect');
+        const zoneSelect = document.getElementById('zoneSelect');
+
+        // Listeners
+        searchInput.addEventListener('input', filterData);
+        nameSelect.addEventListener('change', filterData);
+        genderSelect.addEventListener('change', filterData);
+        schoolSelect.addEventListener('change', filterData);
+        schoolTypeSelect.addEventListener('change', filterData);
+        zoneSelect.addEventListener('change', filterData);
+
+        // Init dropdowns
+        function initAllSelects() {
+            fillSelect([...new Set(allData.map(i => i.Name))], nameSelect);
+            fillSelect([...new Set(allData.map(i => i.Gender))], genderSelect);
+            fillSelect([...new Set(allData.map(i => i.School))], schoolSelect);
+            fillSelect([...new Set(allData.map(i => i['School Type']))], schoolTypeSelect);
+            fillSelect([...new Set(allData.map(i => i.Zone))], zoneSelect);
+        }
+
+        function fillSelect(arr, el) {
+            arr.filter(Boolean).forEach(v => {
+                const opt = document.createElement('option');
+                opt.value = v;
+                opt.innerText = v;
+                el.appendChild(opt);
+            });
+        }
+
+        // Filter logic
+        function filterData() {
+            const kw = searchInput.value.toLowerCase().trim();
+            const name = nameSelect.value;
+            const gender = genderSelect.value;
+            const school = schoolSelect.value;
+            const st = schoolTypeSelect.value;
+            const zone = zoneSelect.value;
+
+            filteredData = allData.filter(item => {
+                const matchSearch =
+                    (item.Name || '').toLowerCase().includes(kw) ||
+                    (item.Gender || '').toLowerCase().includes(kw) ||
+                    (item.School || '').toLowerCase().includes(kw) ||
+                    (item['School Type'] || '').toLowerCase().includes(kw) ||
+                    (item.Zone || '').toLowerCase().includes(kw);
+
+                return matchSearch
+                    && (!name || item.Name === name)
+                    && (!gender || item.Gender === gender)
+                    && (!school || item.School === school)
+                    && (!st || item['School Type'] === st)
+                    && (!zone || item.Zone === zone);
+            });
+            currentPage = 1;
+            renderPage();
+        }
+
+        // Render page
+        function renderPage() {
+            const total = filteredData.length;
+            const totalPage = Math.ceil(total / pageSize);
+            const start = (currentPage - 1) * pageSize;
+            const end = start + pageSize;
+            const pageData = filteredData.slice(start, end);
+
+            renderTable(pageData);
+            renderPagination(totalPage);
+            document.getElementById('pageInfo').innerText =
+                `Total: ${total} records | Page: ${currentPage} / ${totalPage}`;
+        }
+
+        // Render table
+        function renderTable(data) {
+            const b = document.getElementById('dataBody');
+            b.innerHTML = '';
+            data.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${item.Name || ''}</td>
+                    <td>${item.Gender || ''}</td>
+                    <td>${item.School || ''}</td>
+                    <td>${item['School Type'] || ''}</td>
+                    <td>${item.Rating || ''}</td>
+                    <td>${item.Zone || ''}</td>
+                `;
+                b.appendChild(tr);
+            });
+        }
+
+        // Pagination buttons
+        function renderPagination(totalPage) {
+            const p = document.getElementById('pagination');
+            p.innerHTML = '';
+
+            const prev = document.createElement('button');
+            prev.innerText = 'Previous';
+            prev.disabled = currentPage === 1;
+            prev.onclick = () => { currentPage--; renderPage(); };
+            p.appendChild(prev);
+
+            const showPages = 5;
+            let startPage = Math.max(1, currentPage - Math.floor(showPages / 2));
+            let endPage = Math.min(totalPage, startPage + showPages - 1);
+
+            for (let i = startPage; i <= endPage; i++) {
+                const btn = document.createElement('button');
+                btn.innerText = i;
+                if (i === currentPage) btn.className = 'active';
+                btn.onclick = () => { currentPage = i; renderPage(); };
+                p.appendChild(btn);
+            }
+
+            const next = document.createElement('button');
+            next.innerText = 'Next';
+            next.disabled = currentPage === totalPage;
+            next.onclick = () => { currentPage++; renderPage(); };
+            p.appendChild(next);
+        }
+    </script>
+</body>
+</html>
