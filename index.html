@@ -106,10 +106,6 @@
 
         <div class="filter-group">
             <div class="filter-item">
-                <label>Name</label>
-                <select id="nameSelect"><option value="">All</option></select>
-            </div>
-            <div class="filter-item">
                 <label>Gender</label>
                 <select id="genderSelect"><option value="">All</option></select>
             </div>
@@ -151,7 +147,7 @@
         let allData = [];
         let filteredData = [];
         let currentPage = 1;
-        const pageSize = 20;
+        const pageSize = 10;
 
         // Load data
         fetch('data.json')
