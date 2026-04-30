@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Filter System</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            font-family: Arial, sans-serif;
+        }
+        body {
+            margin: 0;
+            padding: 0;
+            background: #f9f9f9;
+        }
+        .filter-container {
+            max-width: 1400px;
+            margin: 30px auto;
+            padding: 0 20px;
+            width: 100%;
+        }
+        .filter-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: end;
+            margin-bottom: 20px;
+        }
+        .filter-item {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            min-width: 140px;
+            flex: 1;
+        }
+        label {
+            font-size: 13px;
+            color: #555;
+        }
+        input, select {
+            padding: 8px 10px;
+            width: 100%;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        input:focus, select:focus {
+            outline: none;
+            border-color: #409eff;
+        }
+        #loading {
+            font-size: 16px;
+            color: #666;
+            padding: 20px 0;
+            text-align: center;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #fff;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        th, td {
+            border: 1px solid #e4e7ed;
+            padding: 10px 12px;
+            text-align: left;
+            font-size: 14px;
+        }
+        th {
+            background: #f5f7fa;
+            font-weight: 600;
+        }
+        tr:hover {
+            background: #fafafa;
+        }
+
+        /* ====================== 移动端布局 ====================== */
+        @media (max-width: 768px) {
+            .mobile-hide {
+                display: none !important;
+            }
+            /* 手机端：Search 占满一行，另外两个各占50% */
+            .filter-item {
+                min-width: 100%;
+            }
+            .filter-group .filter-item:nth-child(2),
+            .filter-group .filter-item:nth-child(3) {
+                min-width: calc(50% - 6px);
+            }
+        }
+
+        /* 分页 */
+        .pagination {
+            margin-top: 20px;
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .pagination button {
+            padding: 6px 12px;
+            border: 1px solid #ddd;
+            background: #fff;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .pagination button.active {
+            background: #409eff;
+            color: #fff;
+            border-color: #409eff;
+        }
+        .pagination button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        .page-info {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+
+<div class="filter-container">
+    <!-- 搜索 + 性别 + 区域 同一行 -->
+    <div class="filter-group">
+        <div class="filter-item">
+            <label>Search</label>
+            <input type="text" id="searchInput" placeholder="Search anything...">
+        </div>
+        <div class="filter-item">
+            <label>Gender</label>
+            <select id="genderSelect"><option value="">All</option></select>
+        </div>
+        <div class="filter-item">
+            <label>Zone</label>
+            <select id="zoneSelect"><option value="">All</option></select>
+        </div>
+    </div>
+
+    <div id="loading">Loading data, please wait...</div>
+
+    <table id="dataTable" style="display:none;">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th class="mobile-hide">Gender</th>
+                <th>School</th>
+                <th class="mobile-hide">School Type</th>
+                <th>Rating</th>
+                <th class="mobile-hide">Zone</th>
+            </tr>
+        </thead>
+        <tbody id="dataBody"></tbody>
+    </table>
+
+    <div class="pagination" id="pagination" style="display:none;"></div>
+    <div class="page-info" id="pageInfo"></div>
+</div>
+
+<script>
+    let allData = [];
+    let filteredData = [];
+    let currentPage = 1;
+    const pageSize = 10; // ✅ 改为每页10条
+
+    // 加载数据
+    fetch('data.json')
+    .then(res => res.json())
+    .then(data => {
+        allData = data;
+        filteredData = [...allData];
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('dataTable').style.display = 'table';
+        document.getElementById('pagination').style.display = 'flex';
+        initSelects();
+        filterData();
+    })
+    .catch(err => {
+        document.getElementById('loading').innerText = "Failed to load data";
+        console.error(err);
+    });
+
+    // 控件
+    const searchInput = document.getElementById('searchInput');
+    const genderSelect = document.getElementById('genderSelect');
+    const zoneSelect = document.getElementById('zoneSelect');
+
+    searchInput.addEventListener('input', filterData);
+    genderSelect.addEventListener('change', filterData);
+    zoneSelect.addEventListener('change', filterData);
+
+    // 初始化下拉
+    function initSelects() {
+        fillSelect([...new Set(allData.map(i => i.Gender))], genderSelect);
+        fillSelect([...new Set(allData.map(i => i.Zone))], zoneSelect);
+    }
+
+    function fillSelect(arr, el) {
+        arr.filter(Boolean).forEach(v => {
+            const opt = document.createElement('option');
+            opt.value = v;
+            opt.innerText = v;
+            el.appendChild(opt);
+        });
+    }
+
+    // ✅ 筛选 + 排序（按 Rating 从高到低）
+    function filterData() {
+        const kw = searchInput.value.toLowerCase().trim();
+        const gender = genderSelect.value;
+        const zone = zoneSelect.value;
+
+        filteredData = allData.filter(item => {
+            const match =
+                (item.Name || '').toLowerCase().includes(kw) ||
+                (item.School || '').toLowerCase().includes(kw) ||
+                (item.Rating || '').toString().includes(kw) ||
+                (item.Gender || '').toLowerCase().includes(kw) ||
+                (item.Zone || '').toLowerCase().includes(kw);
+
+            return match
+                && (!gender || item.Gender === gender)
+                && (!zone || item.Zone === zone);
+        
+        // ✅ 排序：Rating 高 → 低
+        }).sort((a, b) => {
+            const r1 = parseFloat(a.Rating) || 0;
+            const r2 = parseFloat(b.Rating) || 0;
+            return r2 - r1;
+        });
+
+        currentPage = 1;
+        renderPage();
+    }
+
+    // 渲染页面
+    function renderPage() {
+        const total = filteredData.length;
+        const totalPage = Math.ceil(total / pageSize);
+        const start = (currentPage - 1) * pageSize;
+        const pageData = filteredData.slice(start, start + pageSize);
+
+        renderTable(pageData);
+        renderPagination(totalPage);
+        document.getElementById('pageInfo').innerText = `Total: ${total} records | Page ${currentPage}/${totalPage}`;
+    }
+
+    function renderTable(data) {
+        const b = document.getElementById('dataBody');
+        b.innerHTML = '';
+
+        if (data.length === 0) {
+            b.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:20px; color:#999">No matching data</td></tr>`;
+            return;
+        }
+
+        data.forEach(item => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${item.Name || ''}</td>
+                <td class="mobile-hide">${item.Gender || ''}</td>
+                <td>${item.School || ''}</td>
+                <td class="mobile-hide">${item['School Type'] || ''}</td>
+                <td>${item.Rating || ''}</td>
+                <td class="mobile-hide">${item.Zone || ''}</td>`;
+            b.appendChild(tr);
+        });
+    }
+
+    function renderPagination(totalPage) {
+        const p = document.getElementById('pagination');
+        p.innerHTML = '';
+
+        const prev = document.createElement('button');
+        prev.innerText = 'Previous';
+        prev.disabled = currentPage === 1;
+        prev.onclick = () => { currentPage--; renderPage(); };
+        p.appendChild(prev);
+
+        const showPages = 5;
+        let start = Math.max(1, currentPage - 2);
+        let end = Math.min(totalPage, start + showPages - 1);
+
+        for (let i = start; i <= end; i++) {
+            const btn = document.createElement('button');
+            btn.innerText = i;
+            if (i === currentPage) btn.className = 'active';
+            btn.onclick = () => { currentPage = i; renderPage(); };
+            p.appendChild(btn);
+        }
+
+        const next = document.createElement('button');
+        next.innerText = 'Next';
+        next.disabled = currentPage === totalPage;
+        next.onclick = () => { currentPage++; renderPage(); };
+        p.appendChild(next);
+    }
+</script>
+</body>
+</html>
